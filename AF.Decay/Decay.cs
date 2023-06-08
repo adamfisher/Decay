@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 
 namespace AF.Decay
 {
@@ -16,13 +17,13 @@ namespace AF.Decay
         private T _value;
 
         private long _count;
-        private readonly long? _expireAfterCount;
+        private long? _expireAfterCount;
 
         private readonly TimeSpan? _expireAfterTime;
         private readonly DateTimeOffset _startTime;
-        
+
         private readonly Func<DateTimeOffset, long?, TimeSpan?, bool> _expireOnCondition;
-        
+
         private readonly bool _throwExceptionOnExpiration;
 
         /// <summary>
@@ -33,23 +34,20 @@ namespace AF.Decay
         {
             get
             {
+                if (_expireAfterCount.HasValue)
+                {
+                    Interlocked.Increment(ref _count);
+                }
 
-                _count++;
-
-                if (IsValueExpired)
+                if (Expired)
                 {
                     if (_throwExceptionOnExpiration)
                     {
-                        var exception = new ObjectDecayedException($"{_value} of type {_value.GetType().Name} has decayed due to one or more expiration conditions.");
-                        exception.Data[nameof(CounterExpired)] = CounterExpired;
-                        exception.Data[nameof(TimeExpired)] = TimeExpired;
-                        exception.Data[nameof(ConditionExpired)] = ConditionExpired;
-                        exception.Data["AccessCount"] = _count;
-                        exception.Data["ExpireAfterCountLimit"] = _expireAfterCount;
-                        _value = default;
-                        throw exception;
+                        ThrowObjectDecayedException();
                     }
+
                     _value = default;
+                    _expireAfterCount = null;
                 }
 
                 return _value;
@@ -62,9 +60,9 @@ namespace AF.Decay
         /// <value>
         ///   <c>true</c> if this instance expired; otherwise, <c>false</c>.
         /// </value>
-        public bool IsValueExpired => CounterExpired || TimeExpired || ConditionExpired;
+        public bool Expired => EqualityComparer<T>.Default.Equals(_value, default) || CounterExpired || TimeExpired || ConditionExpired;
 
-        private bool CounterExpired => _expireAfterCount.HasValue && _count > _expireAfterCount;
+        private bool CounterExpired => _expireAfterCount.HasValue && Interlocked.Read(ref _count) > _expireAfterCount;
 
         private bool TimeExpired => _expireAfterTime.HasValue && DateTimeOffset.UtcNow > _startTime.Add(_expireAfterTime.Value);
 
@@ -79,7 +77,7 @@ namespace AF.Decay
         /// Unspecified optional conditions will not count toward value expiration. The first condition to be true will expire the value. If no conditions are specified, the default behavior will be to never expire the value which means you probably shouldn't use this Decay<> wrapper if that's the case.
         /// </summary>
         /// <param name="value">The value to decay.</param>
-        /// <param name="expireAfterCount">The number of times this value may be accessed before it expires.</param>
+        /// <param name="expireAfterCount">The number of times this value may be accessed before it expires. A minimum value of 1 will be enforced if this value is set.</param>
         /// <param name="expireAfterTime">The period of time (starting at the time the Decay object is constructed) this value may be accessed before it expires.</param>
         /// <param name="expireOnCondition">Specify a custom function to determine when the object should expire.</param>
         /// <param name="throwExceptionOnExpiration">if set to <c>true</c> [throw exception on expiration]. Default is false.</param>
@@ -97,7 +95,7 @@ namespace AF.Decay
             }
 
             _value = value;
-            _expireAfterCount = expireAfterCount;
+            _expireAfterCount = expireAfterCount.HasValue ? Math.Max(1L, expireAfterCount.Value) : null;
             _expireAfterTime = expireAfterTime;
             _expireOnCondition = expireOnCondition;
             _throwExceptionOnExpiration = throwExceptionOnExpiration;
@@ -107,6 +105,24 @@ namespace AF.Decay
         #endregion
 
         #region Methods
+        
+        private void ThrowObjectDecayedException()
+        {
+            var exception = new ObjectDecayedException(
+                $"{_value} of type {_value.GetType().Name} has decayed due to one or more expiration conditions.")
+            {
+                Data =
+                {
+                    [nameof(CounterExpired)] = CounterExpired,
+                    [nameof(TimeExpired)] = TimeExpired,
+                    [nameof(ConditionExpired)] = ConditionExpired,
+                    ["AccessCount"] = Interlocked.Read(ref _count),
+                    ["AccessCountLimit"] = _expireAfterCount
+                }
+            };
+
+            throw exception;
+        }
 
         public bool Equals(Decay<T> other)
         {
@@ -138,13 +154,7 @@ namespace AF.Decay
             return !Equals(left, right);
         }
 
-        /// <summary>
-        /// Converts to string.
-        /// </summary>
-        /// <returns>
-        /// A <see cref="System.String" /> that represents this instance.
-        /// </returns>
-        public override string ToString() => $"Decay<{typeof(T).Name}>[Expired: {IsValueExpired}]";
+        public override string ToString() => $"Decay<{typeof(T).Name}>[{(Expired ? "Expired" : "Active")}]";
 
         #endregion
     }
