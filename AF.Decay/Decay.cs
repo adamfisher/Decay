@@ -6,15 +6,15 @@ using System.Threading;
 namespace AF.Decay
 {
     /// <summary>
-    /// Provides support for decaying objects that eventually lose their value.
+    /// Decaying objects eventually lose their value based on lifetime conditions.
     /// </summary>
-    /// <typeparam name="T">The type of object that is being decayed.</typeparam>
+    /// <typeparam name="T">The type of decaying object.</typeparam>
     [DebuggerStepThrough]
-    public class Decay<T> : IEquatable<Decay<T>>
+    public class Decay<T> : IEquatable<Decay<T>>, IComparable<Decay<T>>, IComparable
     {
         #region Fields & Properties
 
-        private T _value;
+        internal T _value;
 
         private long _count;
         private long? _expireAfterCount;
@@ -29,7 +29,7 @@ namespace AF.Decay
         /// <summary>
         /// Gets the decaying value of the current <see cref="T:AF.Decay.Decay`1" /> instance.
         /// </summary>
-        /// <exception cref="ObjectDecayedException">Only thrown if the decay object was set to throw an exception when attempting to access the value.</exception>
+        /// <exception cref="ObjectExpiredException">Only thrown if the decay object was set to throw an exception when attempting to access the value.</exception>
         public T Value
         {
             get
@@ -108,7 +108,7 @@ namespace AF.Decay
         
         private void ThrowObjectDecayedException()
         {
-            var exception = new ObjectDecayedException(
+            var exception = new ObjectExpiredException(
                 $"{_value} of type {_value.GetType().Name} has decayed due to one or more expiration conditions.")
             {
                 Data =
@@ -122,6 +122,26 @@ namespace AF.Decay
             };
 
             throw exception;
+        }
+
+        public int CompareTo(Decay<T> other)
+        {
+            if (ReferenceEquals(this, other)) return 0;
+            if (ReferenceEquals(null, other)) return 1;
+            var countComparison = _count.CompareTo(other._count);
+            if (countComparison != 0) return countComparison;
+            var expireAfterCountComparison = Nullable.Compare(_expireAfterCount, other._expireAfterCount);
+            if (expireAfterCountComparison != 0) return expireAfterCountComparison;
+            var expireAfterTimeComparison = Nullable.Compare(_expireAfterTime, other._expireAfterTime);
+            if (expireAfterTimeComparison != 0) return expireAfterTimeComparison;
+            return _startTime.CompareTo(other._startTime);
+        }
+
+        public int CompareTo(object obj)
+        {
+            if (ReferenceEquals(null, obj)) return 1;
+            if (ReferenceEquals(this, obj)) return 0;
+            return obj is Decay<T> other ? CompareTo(other) : throw new ArgumentException($"Object must be of type {nameof(Decay<T>)}");
         }
 
         public bool Equals(Decay<T> other)

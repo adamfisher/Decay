@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using CategoryTraits.Xunit2;
 using FluentAssertions;
+using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace AF.Decay.Tests
@@ -9,7 +11,7 @@ namespace AF.Decay.Tests
     public class DecayTests
     {
         [Fact]
-        public void Constructor_NoExpirationPolicy_DoesNotExpire()
+        public void NoExpirationPolicy_DoesNotExpire()
         {
             var value = 4523;
             var decayingObject = new Decay<int>(value);
@@ -19,7 +21,7 @@ namespace AF.Decay.Tests
         }
 
         [Fact]
-        public void Constructor_ExpireOnCount_ExpiresAfter3()
+        public void ExpireOnCount_ExpiresAfter3()
         {
             var value = "SomeConfigValue";
             var decayingObject = new Decay<string>(value, expireAfterCount: 3);
@@ -38,7 +40,7 @@ namespace AF.Decay.Tests
         }
 
         [Fact]
-        public void Constructor_ExpireOnCount_ExpiresAfter1_WhenNegativeNumberIsSet()
+        public void ExpireOnCount_ExpiresAfter1_WhenNegativeNumberIsSet()
         {
             var value = "SomeConfigValue";
             var decayingObject = new Decay<string>(value, expireAfterCount: -10);
@@ -51,7 +53,7 @@ namespace AF.Decay.Tests
         }
 
         [Fact]
-        public void Constructor_ExpireAfterTime_ExpiresIn3Seconds()
+        public void ExpireAfterTime_ExpiresIn3Seconds()
         {
             var value = "SomeConfigValue";
             var decayingObject = new Decay<string>(value, expireAfterTime: TimeSpan.FromMilliseconds(10));
@@ -67,7 +69,7 @@ namespace AF.Decay.Tests
         }
 
         [Fact]
-        public void Constructor_ExpireOnCondition_ExpiresWhenCustomConditionIsTrue()
+        public void ExpireOnCondition_ExpiresWhenCustomConditionIsTrue()
         {
             var value = "SomeConfigValue";
 
@@ -85,7 +87,41 @@ namespace AF.Decay.Tests
 
         [Fact]
         [UnitTest]
-        public void Constructor_ThrowExceptionOnExpiration_ThrowsException()
+        public void CompareTo_SortsAscendingByNextToDecay_CountBased()
+        {
+            var list = new List<Decay<int>>()
+            {
+                new(1, expireAfterCount: 30),
+                new(2, expireAfterCount: 20),
+                new(3, expireAfterCount: 10)
+            };
+
+            list.Sort();
+
+            list.Should().BeInDescendingOrder(p => p.Value)
+                .And.AllSatisfy(d => d.Expired.Should().BeFalse());
+        }
+
+        [Fact]
+        [UnitTest]
+        public void CompareTo_SortsAscendingByNextToDecay_TimeBased()
+        {
+            var list = new List<Decay<int>>()
+            {
+                new(1, expireAfterTime: TimeSpan.FromMinutes(30)),
+                new(2, expireAfterTime: TimeSpan.FromMinutes(20)),
+                new(3, expireAfterTime: TimeSpan.FromMinutes(10))
+            };
+
+            list.Sort();
+
+            list.Should().BeInDescendingOrder(p => p.Value)
+                .And.AllSatisfy(d => d.Expired.Should().BeFalse());
+        }
+
+        [Fact]
+        [UnitTest]
+        public void ThrowExceptionOnExpiration_ThrowsException()
         {
             var value = 123;
             var decayingObject = new Decay<int>(value, expireAfterCount: 1, throwExceptionOnExpiration: true);
@@ -93,7 +129,7 @@ namespace AF.Decay.Tests
             decayingObject.Value.Should().Be(value);
             decayingObject.Expired.Should().BeFalse();
 
-            decayingObject.Invoking(o => o.Value).Should().Throw<ObjectDecayedException>()
+            decayingObject.Invoking(o => o.Value).Should().Throw<ObjectExpiredException>()
                 .Where(e => e.Data.Contains("CounterExpired"),
                     "the exception dictionary should contain a 'CounterExpired' key.")
                 .Where(e => e.Data.Contains("TimeExpired"),
