@@ -75,11 +75,11 @@ Perhaps you want to delay the creation of the object but also cause it to decay.
 
 ```csharp
 // Delay creation of an expensive object that will expire 10 seconds after it was created.
-var delayedDecayingObject = new Lazy<Decay<SomeObject>>(() => new Decay<SomeObject>(new SomeObject(), expireAfterTime: TimeSpan.FromSeconds(10)));
+var delayedDecayingObject = new Lazy<Decay<SomeObject>>(() => new Decay<SomeObject>(new SomeObject(), expirationDateTime: someFutureDateTime));
 
 // The entire Lazy<> object has started to decay even though the internal SomeObject value has not been initialized yet.
 // This could be useful when it's possible an expensive object should never be created if it's not used within the decaying expiration policy.
-var decayingObject = new Decay<Lazy<SomeObject>>(new Lazy<SomeObject>(() => new SomeObject()), expireAfterTime: TimeSpan.FromSeconds(10));
+var decayingObject = new Decay<Lazy<SomeObject>>(new Lazy<SomeObject>(() => new SomeObject()), expirationDateTime: someFutureDateTime);
 ```
 
 ### Sort
