@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading;
 using CategoryTraits.Xunit2;
 using FluentAssertions;
-using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace AF.Decay.Tests
@@ -56,7 +55,7 @@ namespace AF.Decay.Tests
         public void ExpireAfterTime_ExpiresIn3Seconds()
         {
             var value = "SomeConfigValue";
-            var decayingObject = new Decay<string>(value, expireAfterTime: TimeSpan.FromMilliseconds(10));
+            var decayingObject = new Decay<string>(value, expirationDateTime: DateTimeOffset.UtcNow.AddMilliseconds(10));
 
             decayingObject.Value.Should().Be(value);
             decayingObject.Expired.Should().BeFalse();
@@ -73,13 +72,66 @@ namespace AF.Decay.Tests
         {
             var value = "SomeConfigValue";
 
-            var decayingObject = new Decay<string>(value, expireAfterCount: 25, expireOnCondition: ((creationTime, currentAccessCount, expireAfterTime) =>
+            var decayingObject = new Decay<string>(value, expireAfterCount: 25, expireOnCondition: (expirationTime, currentCount) =>
             {
-                creationTime.Should().NotBeOnOrAfter(DateTimeOffset.UtcNow);
-                currentAccessCount.Should().Be(1);
-                expireAfterTime.HasValue.Should().BeFalse();
+                currentCount.Should().Be(1);
+                expirationTime.HasValue.Should().BeFalse();
                 return true;
-            }));
+            });
+
+            decayingObject.Value.Should().BeNull();
+            decayingObject.Expired.Should().BeTrue();
+        }
+
+        [Fact]
+        public void OnExpiration_DateTimeOffset_FactoryMethod()
+        {
+            var expiration = DateTimeOffset.UtcNow.Subtract(TimeSpan.FromMinutes(5));
+            
+            var decayingObject = Decay<string>.OnExpiration("123", expiration);
+            
+            decayingObject.Expired.Should().BeTrue();
+            decayingObject.Value.Should().BeNull();
+        }
+
+        [Fact]
+        public void OnExpiration_TimeSpan_FactoryMethod()
+        {
+            var expiration = TimeSpan.FromMilliseconds(1);
+            
+            var decayingObject = Decay<string>.OnExpiration("123", expiration);
+            Thread.Sleep(3);
+            
+            decayingObject.Expired.Should().BeTrue();
+            decayingObject.Value.Should().BeNull();
+        }
+
+        [Fact]
+        public void OnCount_FactoryMethod()
+        {
+            var value = "123";
+            var decayingObject = Decay<string>.OnCount(value, 1);
+            
+            decayingObject.Value.Should().Be(value);
+            decayingObject.Expired.Should().BeFalse();
+
+            decayingObject.Value.Should().BeNull();
+            decayingObject.Expired.Should().BeTrue();
+        }
+
+        [Fact]
+        public void OnCondition_FactoryMethod()
+        {
+            var value = "123";
+            var decayingObject = Decay<string>.OnCondition(value, (expirationTime, currentCount) =>
+            {
+                currentCount.Should().Be(0);
+                expirationTime.HasValue.Should().BeFalse();
+                return true;
+            });
+
+            var ss = decayingObject.Value;
+            var bb = decayingObject.Value;
 
             decayingObject.Value.Should().BeNull();
             decayingObject.Expired.Should().BeTrue();
@@ -108,9 +160,9 @@ namespace AF.Decay.Tests
         {
             var list = new List<Decay<int>>()
             {
-                new(1, expireAfterTime: TimeSpan.FromMinutes(30)),
-                new(2, expireAfterTime: TimeSpan.FromMinutes(20)),
-                new(3, expireAfterTime: TimeSpan.FromMinutes(10))
+                new(1, expirationDateTime: DateTimeOffset.UtcNow.AddMinutes(30)),
+                new(2, expirationDateTime: DateTimeOffset.UtcNow.AddMinutes(20)),
+                new(3, expirationDateTime: DateTimeOffset.UtcNow.AddMinutes(10))
             };
 
             list.Sort();

@@ -17,7 +17,7 @@ var myObject = new SomeObject();
 
 var decayingObject = new Decay<SomeObject>(myObject, 
   expireAfterCount: 5, 
-  expireAfterTime: TimeSpan.FromSeconds(10), 
+  expirationDateTime: DateTimeOffset.UtcNow.AddSeconds(10), 
   throwExceptionOnExpiration: true);
 
 myObject = decayingObject.Value; // Access the value up to 5 times within the next 10 seconds before it decays.
@@ -39,22 +39,34 @@ myObject = decayingObject.Value // Value will be null after accessing it five ti
 
 ```csharp
 var myObject = new SomeObject();
-var decayingObject = new Decay<SomeObject>(myObject, expireAfterTime: TimeSpan.FromSeconds(10));
+var decayingObject = new Decay<SomeObject>(myObject, expirationDateTime: DateTimeOffset.UtcNow.AddSeconds(10));
 myObject = decayingObject.Value // Value will be null 10 seconds from creation of the Decay<> object.
 ```
 
 ### Expire On Custom Condition
 
-Sometimes you will want to make values decay based on a custom condition. The `expireOnCondition` parameter allows you to define a custom function that should return **true** when the object is considered expired.
+Sometimes you will want to make values decay based on a custom condition. The `expireOnCondition` parameter allows you to define a custom function that should return **true** when the object is considered expired. This function will be called each time `Decay<T>.Value` is accessed to determine if the object should be marked expired. The `expirationTime == null` and `currentCount == 0` (never increments) unless those policies are set when the object is created. 
 
 ```csharp
 var myObject = new SomeObject();
-var decayingObject = new Decay<string>(value, expireOnCondition: ((DateTimeOffset creationTime, long currentAccessCount, TimeSpan expireAfterTime) =>
+var decayingObject = new Decay<SomeObject>(myObject, expireOnCondition: (DateTimeOffset? expirationTime, long currentCount) =>
 {
-    // Determine when this object will expire with custom logic.
-    return true;
-}));
+    return true; // return true to indicate expiration
+});
 myObject = decayingObject.Value; // Value will be null and expired when your custom function returns true;
+```
+
+### Factory Methods
+
+Instantiate decaying objects with more convenient syntax when you only care about applying a single type of policy:
+
+```csharp
+var decayingObject = Decay<string>.OnExpiration("123", TimeSpan.FromMinutes(30));
+var decayingObject = Decay<string>.OnCount("123", 10);
+var decayingObject = Decay<string>.OnCondition("123", (expirationTime, currentCount) =>
+{
+	return true; // on expiration
+});
 ```
 
 ### Combine with `Lazy<T>`

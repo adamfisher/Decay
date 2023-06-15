@@ -16,15 +16,13 @@ namespace AF.Decay
 
         internal T _value;
 
-        private long _count;
-        private long? _expireAfterCount;
+        internal long _count;
+        internal long? _expireAfterCount;
+        internal DateTimeOffset? _expirationDateTime;
 
-        private readonly TimeSpan? _expireAfterTime;
-        private readonly DateTimeOffset _startTime;
+        internal readonly Func<DateTimeOffset?, long?, bool> _expireOnCondition;
 
-        private readonly Func<DateTimeOffset, long?, TimeSpan?, bool> _expireOnCondition;
-
-        private readonly bool _throwExceptionOnExpiration;
+        internal readonly bool _throwExceptionOnExpiration;
 
         /// <summary>
         /// Gets the decaying value of the current <see cref="T:AF.Decay.Decay`1" /> instance.
@@ -64,9 +62,9 @@ namespace AF.Decay
 
         private bool CounterExpired => _expireAfterCount.HasValue && Interlocked.Read(ref _count) > _expireAfterCount;
 
-        private bool TimeExpired => _expireAfterTime.HasValue && DateTimeOffset.UtcNow > _startTime.Add(_expireAfterTime.Value);
+        private bool TimeExpired => _expirationDateTime.HasValue && DateTimeOffset.UtcNow > _expirationDateTime;
 
-        private bool ConditionExpired => _expireOnCondition != null && _expireOnCondition(_startTime, _count, _expireAfterTime);
+        private bool ConditionExpired => _expireOnCondition != null && _expireOnCondition(_expirationDateTime, _count);
 
         #endregion
 
@@ -78,28 +76,80 @@ namespace AF.Decay
         /// </summary>
         /// <param name="value">The value to decay.</param>
         /// <param name="expireAfterCount">The number of times this value may be accessed before it expires. A minimum value of 1 will be enforced if this value is set.</param>
-        /// <param name="expireAfterTime">The period of time (starting at the time the Decay object is constructed) this value may be accessed before it expires.</param>
-        /// <param name="expireOnCondition">Specify a custom function to determine when the object should expire.</param>
+        /// <param name="expirationDateTime">The period of time this value may be accessed before it expires on the expiration date.</param>
+        /// <param name="expireOnCondition">Specify a custom function to determine when the object should expire.</param>*
         /// <param name="throwExceptionOnExpiration">if set to <c>true</c> [throw exception on expiration]. Default is false.</param>
         /// <exception cref="System.ArgumentNullException">value</exception>
         public Decay(
             T value,
             long? expireAfterCount = null,
-            TimeSpan? expireAfterTime = null,
-            Func<DateTimeOffset, long?, TimeSpan?, bool> expireOnCondition = null,
+            DateTimeOffset? expirationDateTime = null,
+            Func<DateTimeOffset?, long?, bool> expireOnCondition = null,
             bool throwExceptionOnExpiration = false)
         {
             if (value == null)
             {
                 throw new ArgumentNullException(nameof(value));
             }
-
+            
             _value = value;
             _expireAfterCount = expireAfterCount.HasValue ? Math.Max(1L, expireAfterCount.Value) : null;
-            _expireAfterTime = expireAfterTime;
+            _expirationDateTime = expirationDateTime;
             _expireOnCondition = expireOnCondition;
             _throwExceptionOnExpiration = throwExceptionOnExpiration;
-            _startTime = DateTimeOffset.UtcNow;
+        }
+
+        /// <summary>
+        /// Creates a new Decay instance based on the expiration time.
+        /// </summary>
+        /// <param name="value">The value to decay.</param>
+        /// <param name="expirationDateTime">The period of time this value may be accessed before it expires on the expiration date.</param>
+        /// <param name="throwExceptionOnExpiration">if set to <c>true</c> [throw exception on expiration]. Default is false.</param>
+        /// <exception cref="System.ArgumentNullException">value</exception>
+        /// <returns>The new decaying object.</returns>
+        public static Decay<T> OnExpiration(T value, DateTimeOffset expirationDateTime, bool throwExceptionOnExpiration = false)
+        {
+            return new Decay<T>(value, expirationDateTime: expirationDateTime, throwExceptionOnExpiration: throwExceptionOnExpiration);
+        }
+
+        /// <summary>
+        /// Creates a new Decay instance based on the expiration time.
+        /// </summary>
+        /// <param name="value">The value to decay.</param>
+        /// <param name="expireAfterTime">The period of time this value may be accessed from the current time before it expires.</param>
+        /// <param name="throwExceptionOnExpiration">if set to <c>true</c> [throw exception on expiration]. Default is false.</param>
+        /// <exception cref="System.ArgumentNullException">value</exception>
+        /// <returns>The new decaying object.</returns>
+        public static Decay<T> OnExpiration(T value, TimeSpan expireAfterTime, bool throwExceptionOnExpiration = false)
+        {
+            var expiration = DateTime.UtcNow.Add(expireAfterTime);
+            return new Decay<T>(value, expirationDateTime: expiration, throwExceptionOnExpiration: throwExceptionOnExpiration);
+        }
+
+        /// <summary>
+        /// Creates a new Decay instance based on the expiration time.
+        /// </summary>
+        /// <param name="value">The value to decay.</param>
+        /// <param name="count">The number of times this value may be accessed before it expires. A minimum value of 1 will be enforced if this value is set.</param>
+        /// <param name="throwExceptionOnExpiration">if set to <c>true</c> [throw exception on expiration]. Default is false.</param>
+        /// <exception cref="System.ArgumentNullException">value</exception>
+        /// <returns>The new decaying object.</returns>
+        public static Decay<T> OnCount(T value, long count, bool throwExceptionOnExpiration = false)
+        {
+            return new Decay<T>(value, expireAfterCount: count, throwExceptionOnExpiration: throwExceptionOnExpiration);
+        }
+
+        /// <summary>
+        /// Creates a new Decay instance based on the expiration time.
+        /// </summary>
+        /// <param name="value">The value to decay.</param>
+        /// <param name="condition">Specify a custom function to determine when the object should expire.</param>*
+        /// <param name="throwExceptionOnExpiration">if set to <c>true</c> [throw exception on expiration]. Default is false.</param>
+        /// <exception cref="System.ArgumentNullException">value</exception>
+        /// <returns>The new decaying object.</returns>
+        public static Decay<T> OnCondition(T value, Func<DateTimeOffset?, long?, bool> condition, bool throwExceptionOnExpiration = false)
+        {
+            return new Decay<T>(value, expireOnCondition: condition, throwExceptionOnExpiration: throwExceptionOnExpiration);
         }
 
         #endregion
@@ -132,9 +182,9 @@ namespace AF.Decay
             if (countComparison != 0) return countComparison;
             var expireAfterCountComparison = Nullable.Compare(_expireAfterCount, other._expireAfterCount);
             if (expireAfterCountComparison != 0) return expireAfterCountComparison;
-            var expireAfterTimeComparison = Nullable.Compare(_expireAfterTime, other._expireAfterTime);
-            if (expireAfterTimeComparison != 0) return expireAfterTimeComparison;
-            return _startTime.CompareTo(other._startTime);
+            var expirationDateTimeComparison = Nullable.Compare(_expirationDateTime, other._expirationDateTime);
+            if (expirationDateTimeComparison != 0) return expirationDateTimeComparison;
+            return _throwExceptionOnExpiration.CompareTo(other._throwExceptionOnExpiration);
         }
 
         public int CompareTo(object obj)
@@ -155,7 +205,7 @@ namespace AF.Decay
         {
             if (ReferenceEquals(null, obj)) return false;
             if (ReferenceEquals(this, obj)) return true;
-            if (obj.GetType() != this.GetType()) return false;
+            if (obj.GetType() != GetType()) return false;
             return Equals((Decay<T>) obj);
         }
 
