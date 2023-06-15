@@ -81,3 +81,13 @@ var delayedDecayingObject = new Lazy<Decay<SomeObject>>(() => new Decay<SomeObje
 // This could be useful when it's possible an expensive object should never be created if it's not used within the decaying expiration policy.
 var decayingObject = new Decay<Lazy<SomeObject>>(new Lazy<SomeObject>(() => new SomeObject()), expireAfterTime: TimeSpan.FromSeconds(10));
 ```
+
+### Sort
+
+You can also sort a list of decaying objects into the order in which they are next to decay:
+
+```csharp
+var list = new List<Decay<int>>();
+// ... add some objects
+list.Sort(); // Ordered by next to decay
+```
