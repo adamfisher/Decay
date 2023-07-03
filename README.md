@@ -6,7 +6,7 @@ Decay any object causing it's value to expire after a specific condition becomes
 
 **Things to Note**
 - Conditions left unspecified in the constructor of a `Decay<>` object will not be applied toward the expiration policy of the decaying object.
-- `ObjectDecayedException` will be thrown when the value of the decaying object expires if you set `throwExceptionOnExpiration` to `true`. You can inspect the key of the `Data` dictionary of the exception to determine which policies caused the object to expire.
+- `ObjectExpiredException` will be thrown when the value of the decaying object expires if you set `throwExceptionOnExpiration` to `true`. You can inspect the key of the `Data` dictionary of the exception to determine which policies caused the object to expire.
 
 ## Getting Started
 
