@@ -91,3 +91,24 @@ var list = new List<Decay<int>>();
 // ... add some objects
 list.Sort(); // Ordered by next to decay
 ```
+
+### Collections
+
+Extension methods for managing collections of Decay<T> objects.
+
+```csharp
+// Get next item closest to decay, removing expired items
+var nextItem = collection.GetNextDecayingItem();
+
+// Get next item closest to decay, preserving expired items
+var nextItem = collection.GetNextDecayingItem(clearDecayedItems: false);
+
+// Get all expired items
+var expiredItems = collection.GetDecayedItems();
+
+// Get all non-expired items  
+var activeItems = collection.GetNonDecayedItems();
+
+// Remove expired items and get count removed
+int removed = collection.ClearDecayedItems();
+```

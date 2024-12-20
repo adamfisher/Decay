@@ -174,16 +174,47 @@ namespace AF.Decay
             throw exception;
         }
 
+        /// <summary>
+        /// Sorts the Decay objects by expiration conditions with expired items first followed by active items with the longest expiration last.
+        /// </summary>
         public int CompareTo(Decay<T> other)
         {
             if (ReferenceEquals(this, other)) return 0;
             if (ReferenceEquals(null, other)) return 1;
-            var countComparison = _count.CompareTo(other._count);
-            if (countComparison != 0) return countComparison;
-            var expireAfterCountComparison = Nullable.Compare(_expireAfterCount, other._expireAfterCount);
-            if (expireAfterCountComparison != 0) return expireAfterCountComparison;
-            var expirationDateTimeComparison = Nullable.Compare(_expirationDateTime, other._expirationDateTime);
-            if (expirationDateTimeComparison != 0) return expirationDateTimeComparison;
+
+            // Expired items come first
+            if (this.Expired != other.Expired)
+            {
+                return this.Expired ? -1 : 1;
+            }
+
+            // Calculate "time to expiration" for both time and count conditions
+            var now = DateTimeOffset.UtcNow;
+
+            // Time until datetime expiration
+            var thisTimeRemaining = _expirationDateTime.HasValue
+                ? (_expirationDateTime.Value - now).TotalSeconds
+                : double.MaxValue;
+            var otherTimeRemaining = other._expirationDateTime.HasValue
+                ? (other._expirationDateTime.Value - now).TotalSeconds
+                : double.MaxValue;
+
+            // Time until count expiration (estimated based on current count vs limit)
+            var thisCountRemaining = _expireAfterCount.HasValue
+                ? _expireAfterCount.Value - Interlocked.Read(ref _count)
+                : long.MaxValue;
+            var otherCountRemaining = other._expireAfterCount.HasValue
+                ? other._expireAfterCount.Value - Interlocked.Read(ref other._count)
+                : long.MaxValue;
+
+            // Take the minimum remaining time/count for each item
+            var thisMinRemaining = Math.Min(thisTimeRemaining, thisCountRemaining);
+            var otherMinRemaining = Math.Min(otherTimeRemaining, otherCountRemaining);
+
+            var remainingComparison = thisMinRemaining.CompareTo(otherMinRemaining);
+            if (remainingComparison != 0) return remainingComparison;
+
+            // Use throwExceptionOnExpiration as final tiebreaker
             return _throwExceptionOnExpiration.CompareTo(other._throwExceptionOnExpiration);
         }
 
