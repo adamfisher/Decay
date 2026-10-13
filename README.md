@@ -1,90 +1,136 @@
 # C# `Decay<T>`
 
-[![](https://raw.githubusercontent.com/pixel-cookers/built-with-badges/master/nuget/nuget-long.png)](https://www.nuget.org/packages/AF.Decay)
+[![NuGet](https://img.shields.io/nuget/v/AF.Decay.svg)](https://www.nuget.org/packages/AF.Decay)
+[![CI](https://github.com/adamfisher/Decay/actions/workflows/ci.yml/badge.svg)](https://github.com/adamfisher/Decay/actions/workflows/ci.yml)
 
-Decay any object causing it's value to expire after a specific condition becomes true.
+Wrap any object so its value expires once a condition is met: after a number of accesses, after a point in time, or when your own rule says so.
+
+```
+dotnet add package AF.Decay
+```
+
+Targets .NET 10 and .NET Standard 2.0.
 
 **Things to Note**
-- Conditions left unspecified in the constructor of a `Decay<>` object will not be applied toward the expiration policy of the decaying object.
-- `ObjectExpiredException` will be thrown when the value of the decaying object expires if you set `throwExceptionOnExpiration` to `true`. You can inspect the key of the `Data` dictionary of the exception to determine which policies caused the object to expire.
+- Policies you don't configure never apply. If you configure several, the first one to be met expires the value.
+- Expiration is permanent. Once expired, the wrapped value is released and never comes back.
+- Instances are thread-safe, and an access limit is honored exactly under concurrency.
+- Every read of `Value`, `TryGetValue` or `GetValueOrDefault` counts as one access. Reading `Expired`, `AccessCount` and similar properties does not.
+- `Decay<T>` instances compare by reference, not by the value they wrap.
 
 ## Getting Started
 
-Suppose you have an instance called `SomeObject` and you want it to expire after acessing it more than five times or if it has been more than 10 seconds, whichever comes first.
+Suppose you want `someObject` to expire after it has been accessed five times or after 10 seconds, whichever comes first:
 
 ```csharp
-var myObject = new SomeObject();
+var decaying = Decay.Of(someObject)
+    .ExpireAfterAccesses(5)
+    .ExpireAfter(TimeSpan.FromSeconds(10))
+    .Build();
 
-var decayingObject = new Decay<SomeObject>(myObject, 
-  expireAfterCount: 5, 
-  expirationDateTime: DateTimeOffset.UtcNow.AddSeconds(10), 
-  throwExceptionOnExpiration: true);
-
-myObject = decayingObject.Value; // Access the value up to 5 times within the next 10 seconds before it decays.
-
-// 10 seconds later...
-
-myObject = decayingObject.Value; // myObject == null
+if (decaying.TryGetValue(out var value))
+{
+    // Still alive: use value.
+}
 ```
+
+After expiry, `Value` returns `default(T)`. To get an exception instead, add `.ThrowOnExpiration()`:
+
+```csharp
+var decaying = Decay.Of(someObject).ExpireAfterAccesses(1).ThrowOnExpiration().Build();
+
+_ = decaying.Value; // OK
+_ = decaying.Value; // throws ObjectExpiredException; ex.Reason == ExpirationReasons.Count
+```
+
+## Reading the Value
+
+| Member | On expiry |
+|---|---|
+| `TryGetValue(out T value)` | returns `false` |
+| `GetValueOrDefault(T fallback)` | returns `fallback` |
+| `Value` | returns `default(T)`, or throws if created with `ThrowOnExpiration()` |
+
+Prefer `TryGetValue` when `default(T)` (`0`, `false`, `null`) is a meaningful value.
+
+## Policies
 
 ### Expire After Accessing `x` Times
 
 ```csharp
-var myObject = new SomeObject();
-var decayingObject = new Decay<SomeObject>(myObject, expireAfterCount: 5);
-myObject = decayingObject.Value // Value will be null after accessing it five times.
+var decaying = Decay.OnCount(someObject, 5);
+// The first 5 reads return the value; the 6th returns default.
 ```
 
-### Expire After Time Horizon
+### Expire After a Time Horizon
 
 ```csharp
-var myObject = new SomeObject();
-var decayingObject = new Decay<SomeObject>(myObject, expirationDateTime: DateTimeOffset.UtcNow.AddSeconds(10));
-myObject = decayingObject.Value // Value will be null 10 seconds from creation of the Decay<> object.
+var relative = Decay.OnExpiration(someObject, TimeSpan.FromSeconds(10));
+var absolute = Decay.OnExpiration(someObject, DateTimeOffset.UtcNow.AddSeconds(10));
 ```
 
-### Expire On Custom Condition
+### Expire On a Custom Condition
 
-Sometimes you will want to make values decay based on a custom condition. The `expireOnCondition` parameter allows you to define a custom function that should return **true** when the object is considered expired. This function will be called each time `Decay<T>.Value` is accessed to determine if the object should be marked expired. The `expirationTime == null` and `currentCount == 0` (never increments) unless those policies are set when the object is created. 
+The condition receives a `DecayState<T>` holding the value, `AccessCount`, `AccessLimit`, `ExpiresAt` and `Now`, and returns `true` to expire. It runs on every access and every read of `Expired` until the value expires, so keep it fast and free of side effects.
 
 ```csharp
-var myObject = new SomeObject();
-var decayingObject = new Decay<SomeObject>(myObject, expireOnCondition: (DateTimeOffset? expirationTime, long currentCount) =>
-{
-    return true; // return true to indicate expiration
-});
-myObject = decayingObject.Value; // Value will be null and expired when your custom function returns true;
+var cart = new List<string> { "apple" };
+var decaying = Decay.OnCondition(cart, state => state.Value.Count == 0);
 ```
 
-### Factory Methods
-
-Instantiate decaying objects with more convenient syntax when you only care about applying a single type of policy:
+### Combining Policies
 
 ```csharp
-var decayingObject = Decay<string>.OnExpiration("123", TimeSpan.FromMinutes(30));
-var decayingObject = Decay<string>.OnCount("123", 10);
-var decayingObject = Decay<string>.OnCondition("123", (expirationTime, currentCount) =>
-{
-	return true; // on expiration
-});
+var session = Decay.Of(sessionToken)
+    .ExpireAfterAccesses(100)
+    .ExpireAt(endOfShift)
+    .ExpireWhen(state => state.Now.DayOfWeek == DayOfWeek.Sunday)
+    .ThrowOnExpiration()
+    .Build();
 ```
 
-### Combine with `Lazy<T>`
+A builder also converts implicitly: `Decay<string> session = Decay.Of(sessionToken).ExpireAfterAccesses(100);`
 
-Perhaps you want to delay the creation of the object but also cause it to decay. Depending on how you wrap `Lazy<>` and `Decay<>` will determine their behavior.
+## Inspecting and Controlling
 
 ```csharp
-// Delay creation of an expensive object that will expire 10 seconds after it was created.
-var delayedDecayingObject = new Lazy<Decay<SomeObject>>(() => new Decay<SomeObject>(new SomeObject(), expirationDateTime: someFutureDateTime));
-
-// The entire Lazy<> object has started to decay even though the internal SomeObject value has not been initialized yet.
-// This could be useful when it's possible an expensive object should never be created if it's not used within the decaying expiration policy.
-var decayingObject = new Decay<Lazy<SomeObject>>(new Lazy<SomeObject>(() => new SomeObject()), expirationDateTime: someFutureDateTime);
+bool expired = decaying.Expired;
+ExpirationReasons why = decaying.ExpirationReason; // None, Count, Time, Condition, Manual (flags)
+long reads = decaying.AccessCount;                 // reads so far
+long? limit = decaying.AccessLimit;                // configured limit, or null
+long? left = decaying.RemainingAccesses;           // reads left, or null
+DateTimeOffset? expiresAt = decaying.ExpiresAt;    // configured expiry, or null
+decaying.Expire();                                 // expire right now
 ```
 
-### Sort
+## Testing Time-Based Expiry
 
-You can also sort a list of decaying objects into the order in which they are next to decay:
+Inject a `TimeProvider`, for example `FakeTimeProvider` from `Microsoft.Extensions.TimeProvider.Testing`:
+
+```csharp
+var time = new FakeTimeProvider();
+var decaying = Decay.Of("token").ExpireAfter(TimeSpan.FromMinutes(5)).UseTimeProvider(time).Build();
+
+time.Advance(TimeSpan.FromMinutes(6));
+// decaying.Expired == true
+```
+
+## Combine with `Lazy<T>`
+
+Delay creating an object and also make it decay. The order in which you nest `Lazy<>` and `Decay<>` determines the behavior.
+
+```csharp
+// The expensive object is created on first use; its 10-second lifetime starts then.
+var delayedDecaying = new Lazy<Decay<SomeObject>>(() => Decay.OnExpiration(new SomeObject(), TimeSpan.FromSeconds(10)));
+
+// The lifetime starts now, even though SomeObject isn't created yet.
+// Useful when an expensive object should never be created if it isn't needed within the window.
+var decayingLazy = Decay.OnExpiration(new Lazy<SomeObject>(() => new SomeObject()), TimeSpan.FromSeconds(10));
+```
+
+## Collections
+
+Sorting puts expired items first, then items with the fewest remaining accesses, then the earliest expiration time. Custom conditions don't affect order.
 
 ```csharp
 var list = new List<Decay<int>>();
@@ -92,23 +138,28 @@ var list = new List<Decay<int>>();
 list.Sort(); // Ordered by next to decay
 ```
 
-### Collections
-
-Extension methods for managing collections of Decay<T> objects.
+Extension methods for collections of `Decay<T>`:
 
 ```csharp
-// Get next item closest to decay, removing expired items
-var nextItem = collection.GetNextDecayingItem();
+// Next item due to decay, removing expired items (if the collection isn't read-only)
+var next = list.GetNextDecayingItem();
 
-// Get next item closest to decay, preserving expired items
-var nextItem = collection.GetNextDecayingItem(clearDecayedItems: false);
+// Same, but leave expired items in place
+var nextKeep = list.GetNextDecayingItem(clearDecayedItems: false);
 
-// Get all expired items
-var expiredItems = collection.GetDecayedItems();
-
-// Get all non-expired items  
-var activeItems = collection.GetNonDecayedItems();
-
-// Remove expired items and get count removed
-int removed = collection.ClearDecayedItems();
+var expired = list.GetExpired();     // snapshot of expired items
+var active = list.GetActive();       // snapshot of active items
+int removed = list.RemoveExpired();  // remove expired items, returns count removed
 ```
+
+## Upgrading from 1.x
+
+2.0 keeps the 1.x API compiling, with these changes:
+
+- **Reference equality.** `==`, `Equals` and `GetHashCode` no longer compare the wrapped values. The 1.x behavior caused collection helpers to remove the wrong item.
+- **`default(T)` is a real value.** `new Decay<int>(0)` is no longer born expired.
+- **Expiration is permanent**, including when throwing. A custom condition flipping back to `false` no longer revives the value.
+- **Access counting** happens on every read, not only when an access limit is set.
+- **Sort order** compares remaining accesses, then expiration time. It no longer mixes seconds with access counts.
+- **Exception messages** no longer include the wrapped value.
+- **Deprecated:** `GetDecayedItems` → `GetExpired`, `GetNonDecayedItems` → `GetActive`, `ClearDecayedItems` → `RemoveExpired`, and the `(DateTimeOffset?, long?)` condition overload → `Decay.OnCondition(value, state => ...)`. These will be removed in 3.0 ([#4](https://github.com/adamfisher/Decay/issues/4)).

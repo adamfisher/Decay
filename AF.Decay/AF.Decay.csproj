@@ -4,17 +4,18 @@
 		<TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
 		<LangVersion>latest</LangVersion>
 		<Nullable>enable</Nullable>
-		<Version>1.4</Version>
+		<Version>2.0.0</Version>
 		<Authors>Adam Fisher</Authors>
 		<Company />
-		<Description>A C# wrapper to decay values based on conditions.</Description>
+		<Description>Wrap any object so its value expires after a number of accesses, a point in time, or a custom condition. Thread-safe, with a fluent builder, TryGetValue and TimeProvider support.</Description>
+		<PackageReleaseNotes>2.0.0: Fixes default(T) being treated as expired, collection helpers removing the wrong item, non-permanent expiration, unit-mixing sort order and value leakage in exception messages. Adds Decay.Of(...) builder, type-inferred Decay.OnCount/OnExpiration/OnCondition, TryGetValue, GetValueOrDefault, Expire(), ExpirationReason, access/expiry state properties and TimeProvider support. Targets netstandard2.0 and net10.0. See the README's "Upgrading from 1.x" section for behavior changes.</PackageReleaseNotes>
 		<PackageLicenseFile>LICENSE</PackageLicenseFile>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<PackageProjectUrl>https://github.com/adamfisher/Decay</PackageProjectUrl>
 		<PackageIcon>nuclear_icon.png</PackageIcon>
 		<RepositoryUrl>https://github.com/adamfisher/Decay</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
-		<PackageTags>decay, lazy, expire, expiration</PackageTags>
+		<PackageTags>decay;lazy;expire;expiration;ttl;cache;one-time;token</PackageTags>
 
 		<!-- Ship XML docs so IntelliSense works for package consumers. -->
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
