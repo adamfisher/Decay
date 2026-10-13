@@ -21,5 +21,16 @@ namespace AF.Decay
         public ObjectExpiredException(string message, Exception innerException) : base(message, innerException)
         {
         }
+
+        /// <summary>Initializes a new instance of the <see cref="ObjectExpiredException"/> class with a message and the reasons for expiration.</summary>
+        public ObjectExpiredException(string message, ExpirationReasons reason) : base(message)
+        {
+            Reason = reason;
+        }
+
+        /// <summary>
+        /// The policies that caused the value to expire.
+        /// </summary>
+        public ExpirationReasons Reason { get; }
     }
 }

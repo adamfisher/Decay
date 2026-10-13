@@ -32,24 +32,32 @@ namespace AF.Decay.Tests
         }
 
         [Fact]
-        public void GetDecayedItems()
+        public void GetExpired()
         {
-            var nonDecayedItems = _collection.GetDecayedItems();
-            nonDecayedItems.Should().HaveCount(1);
+            _collection.GetExpired().Should().HaveCount(1);
         }
 
         [Fact]
-        public void GetNonDecayedItems()
+        public void GetActive()
         {
-            var nonDecayedItems = _collection.GetNonDecayedItems();
-            nonDecayedItems.Should().HaveCount(3);
+            _collection.GetActive().Should().HaveCount(3);
         }
 
         [Fact]
-        public void ClearDecayedItems()
+        public void RemoveExpired()
         {
-            var clearedItems = _collection.ClearDecayedItems();
-            clearedItems.Should().Be(1);
+            _collection.RemoveExpired().Should().Be(1);
+            _collection.Should().HaveCount(3);
+        }
+
+        [Fact]
+        public void ObsoleteAliases_StillWork()
+        {
+#pragma warning disable CS0618
+            _collection.GetDecayedItems().Should().HaveCount(1);
+            _collection.GetNonDecayedItems().Should().HaveCount(3);
+            _collection.ClearDecayedItems().Should().Be(1);
+#pragma warning restore CS0618
         }
     }
 }

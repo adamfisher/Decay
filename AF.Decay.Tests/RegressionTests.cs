@@ -38,7 +38,7 @@ namespace AF.Decay.Tests
             var expired = Decay<int>.OnExpiration(5, DateTimeOffset.UtcNow.AddSeconds(-1));
             var list = new List<Decay<int>> { active, expired };
 
-            list.ClearDecayedItems().Should().Be(1);
+            list.RemoveExpired().Should().Be(1);
 
             list.Should().ContainSingle().Which.Should().BeSameAs(active);
         }
@@ -51,7 +51,7 @@ namespace AF.Decay.Tests
             _ = decay.Value;
             _ = decay.Value; // expires
 
-            set.ClearDecayedItems().Should().Be(1);
+            set.RemoveExpired().Should().Be(1);
             set.Should().BeEmpty();
         }
 
@@ -73,7 +73,7 @@ namespace AF.Decay.Tests
             ICollection<Decay<int>> array = new[] { expired, active };
 
             array.GetNextDecayingItem().Should().BeSameAs(active);
-            array.ClearDecayedItems().Should().Be(0);
+            array.RemoveExpired().Should().Be(0);
         }
 
         [Fact]
@@ -156,7 +156,7 @@ namespace AF.Decay.Tests
         {
             var calls = 0;
             var list = Enumerable.Range(0, 50)
-                .Select(i => Decay<int>.OnCondition(i, (_, _) => { calls++; return false; }))
+                .Select(i => Decay.OnCondition(i, _ => { calls++; return false; }))
                 .ToList();
 
             list.Sort();

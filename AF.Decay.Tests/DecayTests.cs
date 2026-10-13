@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Threading;
 using FluentAssertions;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace AF.Decay.Tests
@@ -53,14 +53,14 @@ namespace AF.Decay.Tests
         [Fact]
         public void ExpireAfterTime_ExpiresAfterTimeHorizon()
         {
+            var time = new FakeTimeProvider();
             var value = "SomeConfigValue";
-            var decayingObject = new Decay<string>(value, expirationDateTime: DateTimeOffset.UtcNow.AddMilliseconds(10));
+            var decayingObject = Decay.Of(value).ExpireAfter(TimeSpan.FromSeconds(3)).UseTimeProvider(time).Build();
 
             decayingObject.Value.Should().Be(value);
             decayingObject.Expired.Should().BeFalse();
 
-            // Wait at least as long as the object's time horizon and we should be past it by now.
-            Thread.Sleep(TimeSpan.FromMilliseconds(20));
+            time.Advance(TimeSpan.FromSeconds(4));
 
             decayingObject.Value.Should().BeNull();
             decayingObject.Expired.Should().BeTrue();
@@ -96,13 +96,13 @@ namespace AF.Decay.Tests
         [Fact]
         public void OnExpiration_TimeSpan_FactoryMethod()
         {
-            var expiration = TimeSpan.FromMilliseconds(1);
-            
-            var decayingObject = Decay<string>.OnExpiration("123", expiration);
-            Thread.Sleep(3);
-            
-            decayingObject.Expired.Should().BeTrue();
-            decayingObject.Value.Should().BeNull();
+            var before = DateTimeOffset.UtcNow;
+
+            var decayingObject = Decay<string>.OnExpiration("123", TimeSpan.FromMinutes(5));
+
+            decayingObject.ExpiresAt.Should().BeOnOrAfter(before.AddMinutes(5));
+            decayingObject.Expired.Should().BeFalse();
+            Decay<string>.OnExpiration("123", TimeSpan.FromMinutes(-1)).Expired.Should().BeTrue();
         }
 
         [Fact]
@@ -122,18 +122,28 @@ namespace AF.Decay.Tests
         public void OnCondition_FactoryMethod()
         {
             var value = "123";
-            var decayingObject = Decay<string>.OnCondition(value, (expirationTime, currentCount) =>
+            var decayingObject = Decay.OnCondition(value, state =>
             {
-                currentCount.Should().Be(0);
-                expirationTime.HasValue.Should().BeFalse();
-                return true;
+                state.Value.Should().Be(value);
+                state.ExpiresAt.HasValue.Should().BeFalse();
+                return state.AccessCount >= 2;
             });
 
-            var ss = decayingObject.Value;
-            var bb = decayingObject.Value;
-
+            decayingObject.Value.Should().Be(value);
             decayingObject.Value.Should().BeNull();
             decayingObject.Expired.Should().BeTrue();
+            decayingObject.ExpirationReason.Should().Be(ExpirationReasons.Condition);
+        }
+
+        [Fact]
+        public void OnCondition_LegacyDelegate_StillWorks()
+        {
+#pragma warning disable CS0618
+            var decayingObject = Decay<string>.OnCondition("123", (expirationTime, currentCount) => currentCount >= 2);
+#pragma warning restore CS0618
+
+            decayingObject.Value.Should().Be("123");
+            decayingObject.Value.Should().BeNull();
         }
 
         [Fact]
