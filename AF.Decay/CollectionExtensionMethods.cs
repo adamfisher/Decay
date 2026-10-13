@@ -1,8 +1,11 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace AF.Decay
 {
+    /// <summary>
+    /// Extension methods for working with collections of <see cref="Decay{T}"/> objects.
+    /// </summary>
     public static class CollectionExtensionMethods
     {
         /// <summary>
@@ -19,48 +22,59 @@ namespace AF.Decay
 
             if (clearDecayedItems)
             {
-                foreach (var item in collection.Where(i => i.Expired).ToList())
-                {
-                    collection.Remove(item);
-                }
+                collection.ClearDecayedItems();
             }
 
-            var sortedItems = collection.ToList();
-            sortedItems.Sort();
-            return sortedItems.FirstOrDefault(i => !i.Expired);
+            // Evaluate expiration once per item, then do a single linear scan for the minimum.
+            Decay<T> next = null;
+            foreach (var item in collection.ToList())
+            {
+                if (item == null || item.Expired) continue;
+                if (next == null || item.CompareTo(next) < 0) next = item;
+            }
+
+            return next;
         }
 
         /// <summary>
         /// Gets all expired items from the collection.
         /// </summary>
         public static IEnumerable<Decay<T>> GetDecayedItems<T>(this IEnumerable<Decay<T>> collection) 
-            => collection?.ToList().Where(i => i.Expired) ?? Enumerable.Empty<Decay<T>>();
+            => collection?.Where(i => i != null && i.Expired).ToList() ?? Enumerable.Empty<Decay<T>>();
 
         /// <summary>
         /// Gets all non-expired items from the collection.
         /// </summary>
         public static IEnumerable<Decay<T>> GetNonDecayedItems<T>(this IEnumerable<Decay<T>> collection) 
-            => collection?.ToList().Where(i => !i.Expired) ?? Enumerable.Empty<Decay<T>>();
+            => collection?.Where(i => i != null && !i.Expired).ToList() ?? Enumerable.Empty<Decay<T>>();
 
         /// <summary>
-        /// Removes expired items from the collection if it supports removal.
+        /// Removes expired items from the collection if it supports removal. Read-only collections are left untouched.
         /// </summary>
         /// <returns>The number of items removed.</returns>
         public static int ClearDecayedItems<T>(this ICollection<Decay<T>> collection)
         {
-            if (collection == null)
+            if (collection == null || collection.IsReadOnly)
             {
                 return 0;
             }
 
-            var itemsToRemove = collection.Where(i => i.Expired).ToList();
-
-            foreach (var item in itemsToRemove)
+            if (collection is List<Decay<T>> list)
             {
-                collection.Remove(item);
+                return list.RemoveAll(i => i != null && i.Expired);
             }
 
-            return itemsToRemove.Count;
+            var removed = 0;
+
+            foreach (var item in collection.Where(i => i != null && i.Expired).ToList())
+            {
+                if (collection.Remove(item))
+                {
+                    removed++;
+                }
+            }
+
+            return removed;
         }
     }
 }
