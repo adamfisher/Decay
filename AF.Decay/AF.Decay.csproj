@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>net5.0</TargetFramework>
+		<TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
+		<LangVersion>latest</LangVersion>
 		<Version>1.4</Version>
 		<Authors>Adam Fisher</Authors>
 		<Company />
@@ -13,6 +14,17 @@
 		<RepositoryUrl>https://github.com/adamfisher/Decay</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 		<PackageTags>decay, lazy, expire, expiration</PackageTags>
+
+		<!-- Ship XML docs so IntelliSense works for package consumers. -->
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+		<!-- Reproducible builds + source-stepping (SourceLink is built into the .NET 8 SDK). -->
+		<Deterministic>true</Deterministic>
+		<ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+		<PublishRepositoryUrl>true</PublishRepositoryUrl>
+		<EmbedUntrackedSources>true</EmbedUntrackedSources>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
 	</PropertyGroup>
 
 	<ItemGroup>

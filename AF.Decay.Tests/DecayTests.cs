@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
-using CategoryTraits.Xunit2;
 using FluentAssertions;
 using Xunit;
 
@@ -52,7 +51,7 @@ namespace AF.Decay.Tests
         }
 
         [Fact]
-        public void ExpireAfterTime_ExpiresIn3Seconds()
+        public void ExpireAfterTime_ExpiresAfterTimeHorizon()
         {
             var value = "SomeConfigValue";
             var decayingObject = new Decay<string>(value, expirationDateTime: DateTimeOffset.UtcNow.AddMilliseconds(10));
@@ -138,7 +137,6 @@ namespace AF.Decay.Tests
         }
 
         [Fact]
-        [UnitTest]
         public void CompareTo_SortsAscendingByNextToDecay_CountBased()
         {
             var list = new List<Decay<int>>()
@@ -155,7 +153,6 @@ namespace AF.Decay.Tests
         }
 
         [Fact]
-        [UnitTest]
         public void CompareTo_SortsAscendingByNextToDecay_TimeBased()
         {
             var list = new List<Decay<int>>()
@@ -172,7 +169,6 @@ namespace AF.Decay.Tests
         }
 
         [Fact]
-        [UnitTest]
         public void ThrowExceptionOnExpiration_ThrowsException()
         {
             var value = 123;
